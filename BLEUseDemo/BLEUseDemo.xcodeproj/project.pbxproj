@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7BB165F51BFB2B590014D275 /* ResultsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BB165F41BFB2B590014D275 /* ResultsViewController.m */; settings = {ASSET_TAGS = (); }; };
 		7BB508641BEC757F00915DF2 /* SVIndefiniteAnimatedView.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BB5085D1BEC757F00915DF2 /* SVIndefiniteAnimatedView.m */; settings = {ASSET_TAGS = (); }; };
 		7BB508651BEC757F00915DF2 /* SVProgressHUD.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 7BB5085F1BEC757F00915DF2 /* SVProgressHUD.bundle */; settings = {ASSET_TAGS = (); }; };
 		7BB508661BEC757F00915DF2 /* SVProgressHUD.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BB508611BEC757F00915DF2 /* SVProgressHUD.m */; settings = {ASSET_TAGS = (); }; };
@@ -39,6 +40,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		7BB165F21BFAD8220014D275 /* BleDefines.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BleDefines.h; sourceTree = "<group>"; };
+		7BB165F31BFB2B590014D275 /* ResultsViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ResultsViewController.h; sourceTree = "<group>"; };
+		7BB165F41BFB2B590014D275 /* ResultsViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ResultsViewController.m; sourceTree = "<group>"; };
 		7BB5085C1BEC757F00915DF2 /* SVIndefiniteAnimatedView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SVIndefiniteAnimatedView.h; sourceTree = "<group>"; };
 		7BB5085D1BEC757F00915DF2 /* SVIndefiniteAnimatedView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SVIndefiniteAnimatedView.m; sourceTree = "<group>"; };
 		7BB5085E1BEC757F00915DF2 /* SVProgressHUD-Prefix.pch */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "SVProgressHUD-Prefix.pch"; sourceTree = "<group>"; };
@@ -133,6 +137,8 @@
 				7BC68CBE1BE8530B002F6618 /* AppDelegate.m */,
 				7BC68CED1BE85383002F6618 /* RootViewController.h */,
 				7BC68CEE1BE85383002F6618 /* RootViewController.m */,
+				7BB165F31BFB2B590014D275 /* ResultsViewController.h */,
+				7BB165F41BFB2B590014D275 /* ResultsViewController.m */,
 				7BC68CC31BE8530B002F6618 /* Main.storyboard */,
 				7BC68CC61BE8530B002F6618 /* Assets.xcassets */,
 				7BC68CC81BE8530B002F6618 /* LaunchScreen.storyboard */,
@@ -146,6 +152,7 @@
 			isa = PBXGroup;
 			children = (
 				7BC68CBB1BE8530B002F6618 /* main.m */,
+				7BB165F21BFAD8220014D275 /* BleDefines.h */,
 			);
 			name = "Supporting Files";
 			sourceTree = "<group>";
@@ -300,6 +307,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7BC68CBF1BE8530B002F6618 /* AppDelegate.m in Sources */,
+				7BB165F51BFB2B590014D275 /* ResultsViewController.m in Sources */,
 				7BB508671BEC757F00915DF2 /* SVRadialGradientLayer.m in Sources */,
 				7BC68CEF1BE85383002F6618 /* RootViewController.m in Sources */,
 				7BB508661BEC757F00915DF2 /* SVProgressHUD.m in Sources */,

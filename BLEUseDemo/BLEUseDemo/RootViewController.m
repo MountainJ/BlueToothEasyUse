@@ -10,18 +10,30 @@
 #import <CoreBluetooth/CoreBluetooth.h>
 #import "SVProgressHUD.h"
 
-
+#import "BleDefines.h"
+#import "ResultsViewController.h"
 
 @interface RootViewController ()<CBCentralManagerDelegate,CBPeripheralDelegate>
 {
     CBPeripheral *_peripheral;
     UILabel *_bDeviceLabel; //搜索到的蓝牙设备名称
+    int top;//测试标志
+    UILabel *_pressureLabel;
+
 
 }
-
 @property(nonatomic,strong) CBCentralManager *manager;
 
 @property (nonatomic,strong) NSMutableArray *peripheralNames;
+//////////////  //
+@property (nonatomic)   float batteryLevel;
+@property (nonatomic)   BOOL key1;
+@property (nonatomic)   BOOL key2;
+@property (nonatomic)   char x;
+@property (nonatomic)   char y;
+@property (nonatomic)   char z;
+@property (nonatomic)   char TXPwrLevel;
+
 
 @end
 
@@ -34,7 +46,6 @@
     }
     return _peripheralNames;
 }
-
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -68,44 +79,63 @@
     
 }
 
-#pragma mark -2查找到外设过后,回调
+#pragma mark -2查找到外设过后,回调 RSSI描述蓝牙设备距离的参数
 -(void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)RSSI
 {
+    
      NSLog(@"peripheral.name:%@",peripheral.name);
-    //RBP1508010664,MI,MiniBeacon_04819,这是搜索到的3个蓝牙设备名称,根据实际情况更改
+    //RBP1508010664,MI,MiniBeacon_04819,Bluetooth BP,这是搜索到的4个蓝牙设备名称,根据实际情况更改
     /*查找到指定的外设进行操作 [peripheral.name isEqualToString:@"MI"] */
     if (peripheral.name) {
+        //读取外设距离
+//        NSLog(@"advertisementData:%@ ,(NSNumber *)RSSI:%@",advertisementData,RSSI);
         [SVProgressHUD showSuccessWithStatus:[NSString stringWithFormat:@"找到设备:%@",peripheral.name]];
         [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
         _bDeviceLabel.text =[NSString stringWithFormat:@"设备:%@", peripheral.name];
-            /*停止扫描*/
-            [self.manager stopScan];    
             _peripheral = peripheral;
+#pragma mark -4发现外设提供了哪些服务,设置    [peripheral discoverServices:nil];传空代表查询全部服务,一般需要获取服务的UUID,参数( NSArray<CBUUID *> *)serviceUUIDs
+        
+        /*停止扫描*/
+        [self.manager stopScan];
+
     }
+}
+#pragma mark -外设设置代理后更新外设距离
+-(void)peripheralDidUpdateRSSI:(CBPeripheral *)peripheral error:(NSError *)error
+{
+    
+}
+
+-(void)peripheral:(CBPeripheral *)peripheral didReadRSSI:(NSNumber *)RSSI error:(NSError *)error
+{
+    NSLog(@"%s",__func__);
+    int rssi = abs([RSSI intValue]);
+    CGFloat ci = (rssi - 49) / (10 * 4.);
+    NSString *length = [NSString stringWithFormat:@"BLT4.0热点:%@,距离:%.1fm",_peripheral,pow(10,ci)];
+    NSLog(@"%@",length);
 }
 
 #pragma mark -3假设连接成功了这个设备
 //连接外设成功
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
-    NSLog(@"连接成功");
+//    NSLog(@"连接成功");
     _bDeviceLabel.text =[NSString stringWithFormat:@"设备:%@连接成功", _peripheral.name];
     [SVProgressHUD showSuccessWithStatus:@"连接成功"];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
+    /*连接成功过后,设置外设代理*/
+    [_peripheral setDelegate:self];
+    [_peripheral readRSSI];//peripheral:didReadRSSI:error
     //
     [SVProgressHUD showWithStatus:@"更新数据..."];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
-    /*连接成功过后,设置外设代理*/
-    [_peripheral setDelegate:self];
-#pragma mark -4发现外设提供了哪些服务,设置    [peripheral discoverServices:nil];传空代表查询全部服务,一般需要获取服务的UUID,参数( NSArray<CBUUID *> *)serviceUUIDs
+  
+  
 //    NSArray *cbUUIDS = [NSArray arrayWithObjects:[CBUUID UUIDWithString:@"FEE0"],[CBUUID UUIDWithString:@"FEE1"], nil];
     [_peripheral discoverServices:nil];//外设设置了查找服务,会调用 [peripheral:didUpdateValueForCharacteristic:error:]方法
-    //读取外设距离
-    [_peripheral readRSSI];
 }
 //外设连接失败
 -(void)centralManager:(CBCentralManager *)central didFailToConnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
 {
-    NSLog(@"%s",__func__);
     [SVProgressHUD showErrorWithStatus:@"连接失败..."];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
     NSLog(@"连接失败");
@@ -113,26 +143,32 @@
 
 #pragma mark -4发现查找设备的服务
 -(void) peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error{
-    NSLog(@"%s",__func__);
     if (!error) {
         NSLog(@"已经找到服务%@",peripheral.services);
         /*
-         2015-11-06 09:44:45.640 BLEUseDemo[7332:1054771] 已经找到服务(
-         "<CBService: 0x17e4d8d0, isPrimary = YES, UUID = FEE0>",
-         "<CBService: 0x17e378e0, isPrimary = YES, UUID = FEE1>",
-         "<CBService: 0x17e46ba0, isPrimary = YES, UUID = FEE7>",
-         "<CBService: 0x17e4ece0, isPrimary = YES, UUID = 1802>"
-         )
+ 
          */
-        [SVProgressHUD showSuccessWithStatus:@"数据更新成功..."];
+        [SVProgressHUD showSuccessWithStatus:@"数据更新..."];
         [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
+        //=================new================
+        [self getAllCharacteristicsFromKeyfob:peripheral];
+        //=================new================
+
+        
+        
+        
+        
+        
+        
 #pragma mark -5找到了服务过后去找服务的特征(1个服务会对应多个特征),  [peripheral discoverCharacteristics:nil forService:interestingService];第一个参数传空返回所有服务特征
-        //    for (CBService *service in peripheral.services) {
-        //        /*设置查找特征,类似服务的查找*/
-        //        [_peripheral discoverCharacteristics:nil forService:service];
-        //    }
+//            for (CBService *service in peripheral.services)
+//            {
+//                /*设置查找特征,类似服务的查找*/
+//                [_peripheral discoverCharacteristics:nil forService:service];
+//            }
         /*设置查找特征过后会调用2个方法,peripheral: didDiscoverCharacteristicsForService: error:(NSError *)error;然后会调用,peripheral: didUpdateValueForCharacteristic: error:*/
-        [_peripheral discoverCharacteristics:nil forService:peripheral.services[0]];
+//        [_peripheral discoverCharacteristics:nil forService:peripheral.services[0]];
+        
     }else {
         NSLog(@"%@",[error localizedDescription]);
     }
@@ -141,10 +177,9 @@
 
 #pragma mark -5已经查找到了服务的特征
 -(void) peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error{
-    NSLog(@"%s",__func__);
     if (!error) {
-        NSLog(@"已经找到指定服务的特征");
-        NSLog(@"找到服务的特征是:%@",service.characteristics);
+//        NSLog(@"已经找到指定服务的特征");
+//        NSLog(@"找到服务的特征是:%@",service.characteristics);
         /*
          2015-11-06 09:58:00.563 BLEUseDemo[7374:1058331] 找到服务的特征是:(
          "<CBCharacteristic: 0x17e6bfd0, UUID = FF01, properties = 0x2, value = (null), notifying = NO>",
@@ -152,19 +187,29 @@
          "<CBCharacteristic: 0x17e7f440, UUID = FF03, properties = 0x12, value = (null), notifying = NO>"
          )
          */
-        //要获取到指定的特征,通过比较UUID
-        for (CBCharacteristic *characteristic in service.characteristics)
-        {
-            #pragma mark -6找到感兴趣的服务特征,读取特征的值  [peripheral readValueForCharacteristic:interestingCharacteristic];然后回调方法peripheral: didUpdateValueForCharacteristic: error:
-            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
-                NSLog(@"查找到制定的UUID后,读取值....");
-                [_peripheral readValueForCharacteristic:characteristic];
-            }
-            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0E"]]) {
-                NSLog(@"正在匹配特征的UUID值...");
-            }
+//        //要获取到指定的特征,通过比较UUID
+//        for (CBCharacteristic *characteristic in service.characteristics)
+//        {
+//            #pragma mark -6找到感兴趣的服务特征,读取特征的值  [peripheral readValueForCharacteristic:interestingCharacteristic];然后回调方法peripheral: didUpdateValueForCharacteristic: error:
+//            [_peripheral readValueForCharacteristic:characteristic];
+//            
+////            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
+////                NSLog(@"查找到制定的UUID后,读取值....");
+////                [_peripheral readValueForCharacteristic:characteristic];
+////            }
+////            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0E"]]) {
+////                NSLog(@"正在匹配特征的UUID值...");
+////            }
+//
+//        }
+        //======================new=========================
+        NSLog(@"Characteristics of service with UUID : %s found\r\n andName:%@",[self CBUUIDToString:service.UUID],peripheral.name);
+        
+        //======================new==================
 
-        }
+        
+        
+        
     }else {
         NSLog(@"%@",[error localizedDescription]);
     }
@@ -175,18 +220,94 @@
 //获取外设发来的数据，不论是read和notify,获取数据都是从这个方法中读取。不是所有的特征值都可以被读,如果为不可读的数值,返回错误信息
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error
 {
-    NSLog(@"%s",__func__);
-       if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
-           NSString *value = [[NSString alloc]initWithData:characteristic.value encoding:NSUTF8StringEncoding];
-           NSLog(@"characteristic.value:%@",value);
-           
+//======================================================新增=============================================
+#warning i am doing here..........
+
+    UInt16 characteristicUUID = [self CBUUIDToInt:characteristic.UUID];
+    if (!error) {
+        switch(characteristicUUID)
+        {
+            case _LEVEL_SERVICE_UUID:
+            {
+                char batlevel;
+                [characteristic.value getBytes:&batlevel length:_LEVEL_SERVICE_READ_LEN];
+                self.batteryLevel = (float)batlevel;
+                break;
+            }
+            case _KEYS_NOTIFICATION_UUID:
+            {
+                unsigned char keys[2048] = {0};
+                [characteristic.value getBytes:keys length:[characteristic.value length]];//增加了length
+                [self DisplayRece:keys length:[characteristic.value length]];
+                self.key1 = (keys[0] & 0x01);
+                self.key2 = (keys[0] & 0x02);
+                [self  keyValuesUpdated: keys[0]];
+                break;
+            }
+            case _ACCEL_X_UUID:
+            {
+                char xval;
+                [characteristic.value getBytes:&xval length:_ACCEL_READ_LEN];
+                self.x = xval;
+//                [self  accelerometerValuesUpdated:self.x y:self.y z:self.z];
+                break;
+            }
+            case _ACCEL_Y_UUID:
+            {
+                char yval;
+                [characteristic.value getBytes:&yval length:_ACCEL_READ_LEN];
+                self.y = yval;
+//                [[self delegate] accelerometerValuesUpdated:self.x y:self.y z:self.z];
+                break;
+            }
+            case _ACCEL_Z_UUID:
+            {
+                char zval;
+                [characteristic.value getBytes:&zval length:_ACCEL_READ_LEN];
+                self.z = zval;
+//                [[self delegate] accelerometerValuesUpdated:self.x y:self.y z:self.z];
+                break;
+            }
+            case _PROXIMITY_TX_PWR_NOTIFICATION_UUID:
+            {
+                char TXLevel;
+                [characteristic.value getBytes:&TXLevel length:_PROXIMITY_TX_PWR_NOTIFICATION_READ_LEN];
+                self.TXPwrLevel = TXLevel;
+                break;
+//                [[self delegate] TXPwrLevelUpdated:TXLevel];
+            }
+            case ISSC_CHAR_RX_UUID://接收
+            {
+                unsigned char buf[4096] = {0};
+                [characteristic.value getBytes:buf length:[characteristic.value length]];
+                [self DisplayRece:buf length:[characteristic.value length]];
+                break;
+            }
+            default:
+            {
+                unsigned char buf[4096] = {0};
+                [characteristic.value getBytes:buf length:[characteristic.value length]];
+                [self DisplayRece:buf length:[characteristic.value length]];
+                break;
+            }
+        }
+    }else{
+        NSLog(@"updateValueForCharacteristic failed !");
+    }
+    
+
+//======================================================新增=============================================
+//       if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
+//           NSString *value = [[NSString alloc]initWithData:characteristic.value encoding:NSUTF8StringEncoding];
+//           NSLog(@"characteristic.value:%@",value);
+    
 #pragma mark -7订阅感兴趣的服务特征值  [peripheral setNotifyValue:YES forCharacteristic:interestingCharacteristic];
         /*当外设服务的值改变的时候调用以下方法启动监听*/
-        [_peripheral setNotifyValue:YES forCharacteristic:characteristic];
-        
-       }else{
-        NSLog(@"didUpdateValueForCharacteristicData:::%@",[[NSString alloc] initWithData:characteristic.value encoding:NSUTF8StringEncoding]);
-       }
+//        [_peripheral setNotifyValue:YES forCharacteristic:characteristic];
+    
+//       }else{
+//        NSLog(@"didUpdateValueForCharacteristicData:::%@",[[NSString alloc] initWithData:characteristic.value encoding:NSUTF8StringEncoding]);
+//       }
     
 }
 
@@ -195,7 +316,7 @@
 {
     NSLog(@"%s",__func__);
     if (error) {
-        NSLog(@"Error changing notification state: %@",[error localizedDescription]);
+        NSLog(@"Error state: %@",[error localizedDescription]);
 //        return;
     }
     if (characteristic.isNotifying) {
@@ -204,53 +325,51 @@
         
     } else {
            NSLog(@"noting...//test writing data");
-            #pragma mark -8 向外设写入特征数据,比如温度改写  writeValue:forCharacteristic:type:/ CBPeripheral 类中
-            NSData *cData = characteristic.value;
-            [_peripheral writeValue:cData forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+        
     }
     
-
-    
 }
 
-#pragma mark -8 写入数据过后,回调的方法,会进行设备与手机配对
-- (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(nonnull CBCharacteristic *)characteristic error:(nullable NSError *)error
-{
-    NSLog(@"%s",__func__);
-    if (error) {
-        NSLog(@"Error writing characteristic value: %@",[error localizedDescription]);
-    }
-}
-
-#pragma mark -外设设置代理后更新外设距离
--(void)peripheralDidUpdateRSSI:(CBPeripheral *)peripheral error:(NSError *)error
-{
-    NSLog(@"%s",__func__);
-    int rssi = abs([peripheral.RSSI intValue]);
-    CGFloat ci = (rssi - 49) / (10 * 4.);
-    NSString *length = [NSString stringWithFormat:@"BLT4.0热点:%@,距离:%.1fm",_peripheral,pow(10,ci)];
-    NSLog(@"%@",length);
-}
 
 #pragma mark - 界面配置...
 -(void)configUI
 {
     self.title = @"BlueToothUse";
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(self.view.frame.size.width/2-140, 64+20, 280, 30)];
-    label.backgroundColor = [UIColor yellowColor];
-    label.textColor = [UIColor redColor];
-    label.text = @"设备....";
-    _bDeviceLabel= label;
-    [self.view addSubview:label];
+    UILabel *deviceLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.frame.size.width/2-140, 64+20, 280, 30)];
+    deviceLabel.backgroundColor = [UIColor yellowColor];
+    deviceLabel.textColor = [UIColor redColor];
+    deviceLabel.text = @"设备....";
+    _bDeviceLabel= deviceLabel;
+    [self.view addSubview:deviceLabel];
+    //
+    UILabel *pressureLabel = [[UILabel alloc] initWithFrame:CGRectMake(CGRectGetMinX(deviceLabel.frame), CGRectGetMaxY(deviceLabel.frame)+20, CGRectGetWidth(deviceLabel.frame), CGRectGetHeight(deviceLabel.frame))];
+    pressureLabel.backgroundColor = [UIColor yellowColor];
+    _pressureLabel = pressureLabel;
+    [self.view addSubview:pressureLabel];
+    
+    
     //扫描设备
-    UIButton *scanButton=[self quickButton:CGRectMake(self.view.frame.size.width/2-100, 400, 200, 30) backGroundColor:[UIColor blueColor] clickAction:@selector(foundDevice:) textColor:nil buttonText:@"扫描设备"];
+    UIButton *scanButton=[self quickButton:CGRectMake(self.view.frame.size.width/2-100, 300, 200, 30) backGroundColor:[UIColor blueColor] clickAction:@selector(foundDevice:) textColor:nil buttonText:@"扫描设备"];
     //连接设备
   UIButton *connectButton =[self quickButton:CGRectMake(CGRectGetMinX(scanButton.frame), CGRectGetMaxY(scanButton.frame)+20, 200, 40) backGroundColor:[UIColor greenColor] clickAction:@selector(connectDevice:) textColor:[UIColor darkTextColor] buttonText:@"连接设备"];
     //断开连接
-    [self quickButton:CGRectMake(CGRectGetMinX(connectButton.frame), CGRectGetMaxY(connectButton.frame)+20, 200, 30) backGroundColor:[UIColor redColor] clickAction:@selector(cancelConnectDevice:) textColor:nil buttonText:@"断开连接"];
+  UIButton *outButton =[self quickButton:CGRectMake(CGRectGetMinX(connectButton.frame), CGRectGetMaxY(connectButton.frame)+20, 200, 30) backGroundColor:[UIColor redColor] clickAction:@selector(cancelConnectDevice:) textColor:nil buttonText:@"断开连接"];
+    //发送请求
+    [self quickButton:CGRectMake(CGRectGetMinX(outButton.frame), CGRectGetMaxY(outButton.frame)+20, 200, 30) backGroundColor:[UIColor orangeColor] clickAction:@selector(sendConnect:) textColor:nil buttonText:@"发送操作信号"];
 }
 
-- (UIButton *)quickButton:(CGRect)frame backGroundColor:(UIColor *)backGroundColor clickAction:(SEL)actionSel  textColor:(UIColor *)textColor buttonText:(NSString *)btnText;
+- (UILabel *)quickLabel:(CGRect)frame  backGroundColor:(UIColor *)backGroundColor  textColor:(UIColor *)textColor textFont:(UIFont *)font labelText:(NSString *)labelText
+{
+    UILabel *label = [[UILabel alloc] initWithFrame:frame];
+    label.backgroundColor = backGroundColor;
+    label.textColor = textColor;
+    label.font = font;
+    label.text = labelText;
+    [self.view addSubview:label];
+    return label;
+}
+
+- (UIButton *)quickButton:(CGRect)frame backGroundColor:(UIColor *)backGroundColor clickAction:(SEL)actionSel  textColor:(UIColor *)textColor buttonText:(NSString *)btnText
 {
     //
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -262,6 +381,94 @@
     [self.view addSubview:btn];
     return btn;
 }
+
+#pragma mark - 发送操作信号
+- (void)sendConnect:(UIButton *)btn
+{
+    //对连接的蓝牙设备进行写操作
+#pragma mark -8 向外设写入特征数据,比如温度改写  writeValue:forCharacteristic:type:/ CBPeripheral 类中
+    //手机发[0xFD,0xFD,0xFA,0x05,年,月,日,小时,分,秒,0x0D, 0x0A]
+    [self enableButtons:_peripheral];         // Enable button service (if found)
+    [self enableTXPower:_peripheral];         // Enable TX power service (if found)
+    [self enableRead:_peripheral];
+    //
+    //发送数据告之血压计,连接成功,并可以进行量测.
+    uint8_t b[] = {0xFD,0xFD,0xFA,0x05,0X0D, 0x0A};
+    NSMutableData *data = [[NSMutableData alloc] initWithBytes:b length:6];
+    [self writeValue:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_TX_UUID p:_peripheral data:data];
+    
+}
+
+-(void)writeValue:(int)serviceUUID characteristicUUID:(int)characteristicUUID p:(CBPeripheral *)p data:(NSData *)data
+{
+    //NSLog(@"WRITE:====:%04X, %04X", serviceUUID, characteristicUUID);
+    
+    UInt16 s = [self swap:serviceUUID];
+    UInt16 c = [self swap:characteristicUUID];
+    NSData *sd = [[NSData alloc] initWithBytes:(char *)&s length:2];
+    NSData *cd = [[NSData alloc] initWithBytes:(char *)&c length:2];
+    CBUUID *su = [CBUUID UUIDWithData:sd];
+    CBUUID *cu = [CBUUID UUIDWithData:cd];
+    CBService *service = [self findServiceFromUUID:su p:p];
+    if (!service) {
+        NSLog(@"Could not find service with UUID %s on peripheral with UUID \r\n",[self CBUUIDToString:su]);
+        return;
+    }
+    CBCharacteristic *characteristic = [self findCharacteristicFromUUID:cu service:service];
+    if (!characteristic) {
+        NSLog(@"Could not find characteristic with UUID %s on service with UUID %s on peripheral with UUID \r\n",[self CBUUIDToString:cu],[self CBUUIDToString:su]);
+        return;
+    }
+    [p writeValue:data forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];  //ISSC
+}
+#pragma mark -8 写入数据过后,回调的方法,会进行设备与手机配对
+- (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(nonnull CBCharacteristic *)characteristic error:(nullable NSError *)error
+{
+    NSLog(@"%s",__func__);
+    if (error) {
+        NSLog(@"Error writing characteristic value: %@",[error localizedDescription]);
+    }
+}
+
+
+-(void) enableButtons:(CBPeripheral *)p {
+    [self notification:_KEYS_SERVICE_UUID characteristicUUID:_KEYS_NOTIFICATION_UUID p:p on:YES];
+}
+
+-(void) enableTXPower:(CBPeripheral *)p {
+    [self notification:_PROXIMITY_TX_PWR_SERVICE_UUID characteristicUUID:_PROXIMITY_TX_PWR_NOTIFICATION_UUID p:p on:YES];
+}
+
+-(void)enableRead:(CBPeripheral*)p
+{
+    [self notification:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_RX_UUID p:p on:YES];
+}
+
+-(void)notification:(int)serviceUUID characteristicUUID:(int)characteristicUUID p:(CBPeripheral *)p on:(BOOL)on
+{
+    //NSLog(@"NOTIFICATION:====:%04X, %04X", serviceUUID, characteristicUUID);
+    
+    UInt16 s = [self swap:serviceUUID];
+    UInt16 c = [self swap:characteristicUUID];
+    NSData *sd = [[NSData alloc] initWithBytes:(char *)&s length:2];
+    NSData *cd = [[NSData alloc] initWithBytes:(char *)&c length:2];
+    CBUUID *su = [CBUUID UUIDWithData:sd];
+    CBUUID *cu = [CBUUID UUIDWithData:cd];
+    CBService *service = [self findServiceFromUUID:su p:p];
+    if (!service) {
+        NSLog(@"Could not find service with UUID %s on peripheral with UUID \r\n",[self CBUUIDToString:su]);
+        return;
+    }
+    CBCharacteristic *characteristic = [self findCharacteristicFromUUID:cu service:service];
+    if (!characteristic) {
+        NSLog(@"Could not find characteristic with UUID %s on service with UUID  on peripheral with UUID %s\r\n",[self CBUUIDToString:cu],[self CBUUIDToString:su]);
+        return;
+    }
+    [p setNotifyValue:on forCharacteristic:characteristic];
+}
+
+
+
 #pragma mark - 断开连接
 - (void)cancelConnectDevice:(UIButton *)btn
 {
@@ -303,5 +510,194 @@
     });
 }
 
+#pragma mark --------------------新添的第三方方法类============================
+-(UInt16) CBUUIDToInt:(CBUUID *) UUID {
+    char b1[16];
+    [UUID.data getBytes:b1 length:1];
+    return ((b1[0] << 8) | b1[1]);
+}
 
+//接收数据
+-(void)DisplayRece:(unsigned char*)buf length:(int)len
+{
+    
+    NSLog(@"len==%d",len);
+    for (int i =0; i<len; i++) {
+        printf("0x%02x ",buf[i]);
+    }
+    printf("\n");
+
+//    NSLog(@"(unsigned char*)buf=%s,,,,(int)len=%d",buf,len);
+    //
+    NSString *err = nil;
+    //1：数据至少6个字节
+    if (len < 6) {
+        return;
+    }
+    //2：检查命令头
+    if (buf[0] != 0xFD || buf[1] != 0xFD) {
+        return;
+    }
+    //3：检查命令尾
+    if (buf[len-2] != 0x0D || buf[len-1] != 0x0A) {
+        return;
+    }
+    
+    //4：命令类型
+    switch (buf[2]) {
+        case 0xFB: //测过程中会发压力信号
+            [self TestShowGetPressureH:buf[3] PressureL:buf[4]];
+            break;
+            
+        case 0xFC: //测量结果
+        {
+            [self TestShowGetData:buf[3] DIA:buf[4] PUL:buf[5]];
+            /*
+             //测量完成后,发送关机指令给血压计
+             uint8_t b[] = {0xFD,0xFD,0xFE, 0x06, 0X0D, 0x0A};
+             NSMutableData *data = [[NSMutableData alloc] initWithBytes:b length:6];
+             [self.t writeValue:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_TX_UUID p:self.t.activePeripheral data:data];
+             */
+        }
+            break;
+            
+        case 0xFD: //错误代码
+            switch (buf[3]) {
+                case 0x0E: //EEPROM异常
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error0E", @"InfoPlist", nil), buf[3]];
+                    break;
+                case 0x01: //人体心跳信号太小或压力突降
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error01", @"InfoPlist", nil), buf[3]];
+                    break;
+                case 0x02: //杂讯干扰
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error02", @"InfoPlist", nil), buf[3]];
+                    break;
+                case 0x03: //充气时间过长
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error03", @"InfoPlist", nil), buf[3]];
+                    break;
+                case 0x05: //测得的结果异常
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error05", @"InfoPlist", nil), buf[3]];
+                    break;
+                case 0x0C: //校正异常
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error0C", @"InfoPlist", nil), buf[3]];
+                    break;
+                case 0x0B: //电源低电压
+                    err = [NSString stringWithFormat:NSLocalizedStringFromTable(@"Error0B", @"InfoPlist", nil), buf[3]];
+                    break;
+                default:
+                    break;
+            }
+            break;
+            
+        default:
+            break;
+    }
+    
+    //显示错误信息
+    if (err ) {
+        NSLog(@"%@",[err localizedCapitalizedString]);
+           }
+
+    
+    
+    
+}
+//蓝牙委托函数
+-(void)keyValuesUpdated:(char)sw {
+}
+
+-(void) getAllCharacteristicsFromKeyfob:(CBPeripheral *)peripheral{
+    for (int i=0; i < peripheral.services.count; i++) {
+        CBService *service = [peripheral.services objectAtIndex:i];
+        NSLog(@"Fetching characteristics for service with UUID : %s\r",[self CBUUIDToString:service.UUID]);
+        [peripheral discoverCharacteristics:nil forService:service];
+    }
+}
+
+-(const char *) CBUUIDToString:(CBUUID *) UUID {
+    return [[UUID.data description] cStringUsingEncoding:NSStringEncodingConversionAllowLossy];
+}
+
+-(UInt16) swap:(UInt16)s {
+    UInt16 temp = s << 8;
+    temp |= (s >> 8);
+    return temp;
+}
+
+-(CBService *) findServiceFromUUID:(CBUUID *)UUID p:(CBPeripheral *)p
+{
+    for(int i = 0; i < p.services.count; i++) {
+        CBService *s = [p.services objectAtIndex:i];
+        if ([self compareCBUUID:s.UUID UUID2:UUID])
+        return s;
+    }
+    return nil; //Service not found on this peripheral
+}
+
+-(CBCharacteristic *) findCharacteristicFromUUID:(CBUUID *)UUID service:(CBService*)service {
+    for(int i=0; i < service.characteristics.count; i++) {
+        CBCharacteristic *c = [service.characteristics objectAtIndex:i];
+        if ([self compareCBUUID:c.UUID UUID2:UUID]) return c;
+    }
+    return nil; //Characteristic not found on this service
+}
+
+-(int) compareCBUUID:(CBUUID *) UUID1 UUID2:(CBUUID *)UUID2 {
+    char b1[16];
+    char b2[16];
+    [UUID1.data getBytes:b1 length:4];
+    [UUID2.data getBytes:b2 length:4];
+//    [UUID1.data getBytes:b1 length:1];
+//    [UUID2.data getBytes:b2 length:1];
+    if (memcmp(b1, b2, UUID1.data.length) == 0)return 1;
+    else return 0;
+}
+
+
+#pragma mark -测量过程压力值
+-(void)TestShowGetPressureH:(uint8_t)pressureH PressureL:(uint8_t)pressureL
+{
+    //测量过程压力值
+    top = pressureH*256 + pressureL;
+    _pressureLabel.text = [NSString stringWithFormat:@"压力的值为%d",top];
+//    if(top < 300){
+//        
+//        CGRect myRect= CGRectMake(_bgfullImg.frame.origin.x,
+//                                  _bgfullImg.frame.origin.y + _bgfullImg.frame.size.height - top,
+//                                  _bgfullImg.frame.size.width, top);
+//        
+//        [_bgfullImg setFrame:myRect];//CGRectMake(273,451-0,40,0)];
+//    }
+}
+//测试函数
+-(void)TestShowGetData:(uint8_t)sys DIA:(uint8_t)dia PUL:(uint8_t)pul
+{
+    //2,结束测量时，取消心跳
+//    if ([heartImgTimer isValid]) {
+//        [heartImgTimer invalidate];//无效
+//        heartImgTimer = nil;
+//    }
+    
+    ResultsViewController *resultsController = [[ResultsViewController alloc] init];
+//    
+//    resultsController.Userflag = self.Userflag;
+//    resultsController.userInfoArr = self.userInfoArr;
+//    
+//    resultsController.t = self.t;
+//    
+//    NSDate *date =[NSDate date];
+//    
+//    NSDateFormatter* formatter = [[NSDateFormatter alloc] init];
+//    [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+//    NSString* CurDate = [formatter stringFromDate:date];
+//    
+//    resultsController.scaleInfo = [[ScaleInfo alloc]init];
+//    
+//    resultsController.scaleInfo._Date = CurDate;
+//    resultsController.scaleInfo._SYS = sys;
+//    resultsController.scaleInfo._DIA = dia;
+//    resultsController.scaleInfo._PUL = pul;
+    [self presentViewController:resultsController animated:YES completion:^{
+    }];
+}
 @end
