@@ -50,7 +50,7 @@
     [super viewDidLoad];
      self.view.backgroundColor  =[UIColor lightGrayColor];
     [self configUI];
-    //创建CBCentralManager *manager ,设置代理,每次都检测蓝牙设备是否开启,如果关闭就会有系统提示开启
+    //创建CBCentralManager *manager ,设置代理,每次都检测蓝牙设备是否开启,如果关闭就会有系统提示开启.当Central Manager被初始化，我们要检查它的状态，以检查运行这个App的设备是不是支持BLE
     _manager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
 }
 #pragma mark -1蓝牙开启或者关闭状态实时监测.该方法会根据设备蓝牙的状态多次调用...
@@ -68,8 +68,8 @@
     }
 }
 
-#pragma mark -2扫描可用的外设
-//点击开始进行扫描
+#pragma mark -2开始扫描
+
 -(void)scanClick
 {   /*
      第一个参数为空,即为返回所有的设备;第二个参数设置是否重名等
@@ -79,22 +79,26 @@
 }
 
 #pragma mark -2查找到外设过后,回调 RSSI描述蓝牙设备距离的参数
+/**
+ *  查找到外设过后,回调 RSSI描述蓝牙设备距离的参数
+ *
+ *  @param central
+ *  @param peripheral
+ *  @param advertisementData  任何广播、扫描的响应数据保存在advertisementData 中{kCBAdvDataIsConnectable,kCBAdvDataLocalName,kCBAdvDataServiceUUIDs}
+ *  @param RSSI              Received Signal Strength Indicator /信号质量
+ */
 -(void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)RSSI
 {
-     NSLog(@"peripheral.name:%@",peripheral.name);
     //RBP1508010664,MI,MiniBeacon_04819,Bluetooth BP,这是搜索到的4个蓝牙设备名称,根据实际情况更改
-    /*查找到指定的外设进行操作 [peripheral.name isEqualToString:@"MI"] */
-    if (peripheral.name) {
+    if ([peripheral.name isEqual:@"Bluetooth BP"]) {
         //读取外设距离
-//        NSLog(@"advertisementData:%@ ,(NSNumber *)RSSI:%@",advertisementData,RSSI);
         [SVProgressHUD showSuccessWithStatus:[NSString stringWithFormat:@"找到设备:%@",peripheral.name]];
         [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
         _bDeviceLabel.text =[NSString stringWithFormat:@"设备:%@", peripheral.name];
-            _peripheral = peripheral;
-#pragma mark -4发现外设提供了哪些服务,设置    [peripheral discoverServices:nil];传空代表查询全部服务,一般需要获取服务的UUID,参数( NSArray<CBUUID *> *)serviceUUIDs
+        _peripheral = peripheral;
+
         /*停止扫描*/
         [self.manager stopScan];
-
     }
 }
 #pragma mark -外设设置代理后更新外设距离
@@ -112,28 +116,33 @@
 }
 
 #pragma mark -3假设连接成功了这个设备
-//连接外设成功
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
-//    NSLog(@"连接成功");
     _bDeviceLabel.text =[NSString stringWithFormat:@"设备:%@连接成功", _peripheral.name];
     [SVProgressHUD showSuccessWithStatus:@"连接成功"];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
-    /*连接成功过后,设置外设代理*/
-    [_peripheral setDelegate:self];
+    
     [_peripheral readRSSI];//peripheral:didReadRSSI:error
     //
     [SVProgressHUD showWithStatus:@"更新数据..."];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
-  
+    //
+#pragma mark -4发现外设提供了哪些服务,设置    [peripheral discoverServices:nil];传空代表查询全部服务,一般需要获取服务的UUID,参数( NSArray<CBUUID *> *)serviceUUIDs
 //    NSArray *cbUUIDS = [NSArray arrayWithObjects:[CBUUID UUIDWithString:@"FEE0"],[CBUUID UUIDWithString:@"FEE1"], nil];
     [_peripheral discoverServices:nil];//外设设置了查找服务,会调用 [peripheral:didUpdateValueForCharacteristic:error:]方法
+
 }
 //外设连接失败
 -(void)centralManager:(CBCentralManager *)central didFailToConnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
 {
     [SVProgressHUD showErrorWithStatus:@"连接失败..."];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
-    NSLog(@"连接失败");
+}
+
+- (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
+{
+    NSLog(@"连接中突然断开了...");
+    //需要进行回连
+    [self.manager connectPeripheral:_peripheral options:nil];
 }
 
 #pragma mark -4发现查找设备的服务
@@ -162,35 +171,34 @@
    
 }
 
+-(void) getAllCharacteristicsFromKeyfob:(CBPeripheral *)peripheral{
+    for (int i=0; i < peripheral.services.count; i++) {
+        CBService *service = [peripheral.services objectAtIndex:i];
+        [peripheral discoverCharacteristics:nil forService:service];
+    }
+}
+
 #pragma mark -5已经查找到了服务的特征
 -(void) peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error{
     if (!error) {
-//        NSLog(@"已经找到指定服务的特征");
-//        NSLog(@"找到服务的特征是:%@",service.characteristics);
-        /*
-         2015-11-06 09:58:00.563 BLEUseDemo[7374:1058331] 找到服务的特征是:(
-         "<CBCharacteristic: 0x17e6bfd0, UUID = FF01, properties = 0x2, value = (null), notifying = NO>",
-         "<CBCharacteristic: 0x17e7cfd0, UUID = FF02, properties = 0xA, value = (null), notifying = NO>",
-         "<CBCharacteristic: 0x17e7f440, UUID = FF03, properties = 0x12, value = (null), notifying = NO>"
-         )
-         */
+
 //        //要获取到指定的特征,通过比较UUID
-//        for (CBCharacteristic *characteristic in service.characteristics)
-//        {
-//            #pragma mark -6找到感兴趣的服务特征,读取特征的值  [peripheral readValueForCharacteristic:interestingCharacteristic];然后回调方法peripheral: didUpdateValueForCharacteristic: error:
-//            [_peripheral readValueForCharacteristic:characteristic];
-//            
-////            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
-////                NSLog(@"查找到制定的UUID后,读取值....");
-////                [_peripheral readValueForCharacteristic:characteristic];
-////            }
-////            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0E"]]) {
-////                NSLog(@"正在匹配特征的UUID值...");
-////            }
-//
-//        }
+        for (CBCharacteristic *characteristic in service.characteristics)
+        {
+            #pragma mark -6找到感兴趣的服务特征,读取特征的值  [peripheral readValueForCharacteristic:interestingCharacteristic];然后回调方法peripheral: didUpdateValueForCharacteristic: error:
+            [_peripheral readValueForCharacteristic:characteristic];
+            
+//            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
+//                NSLog(@"查找到制定的UUID后,读取值....");
+//                [_peripheral readValueForCharacteristic:characteristic];
+//            }
+//            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0E"]]) {
+//                NSLog(@"正在匹配特征的UUID值...");
+//            }
+
+        }
         //======================new=========================
-        NSLog(@"Characteristics of service with UUID : %s found\r\n andName:%@",[self CBUUIDToString:service.UUID],peripheral.name);
+//        NSLog(@"Characteristics of service with UUID : %s found\r\n andName:%@",[self CBUUIDToString:service.UUID],peripheral.name);
         //======================new==================
 
     }else {
@@ -203,6 +211,7 @@
 //获取外设发来的数据，不论是read和notify,获取数据都是从这个方法中读取。不是所有的特征值都可以被读,如果为不可读的数值,返回错误信息
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error
 {
+    NSLog(@"%@",characteristic);
     UInt16 characteristicUUID = [self CBUUIDToInt:characteristic.UUID];
      if (!error) {
         switch(characteristicUUID)
@@ -214,10 +223,10 @@
                 self.batteryLevel = (float)batlevel;
                 break;
             }
-            case _KEYS_NOTIFICATION_UUID:
+            case _KEYS_NOTIFICATION_UUID://FFE1
             {
                 unsigned char keys[2048] = {0};
-                [characteristic.value getBytes:keys length:[characteristic.value length]];//增加了length
+                [characteristic.value getBytes:keys length:[characteristic.value length]];
                 [self DisplayRece:keys length:[characteristic.value length]];
                 self.key1 = (keys[0] & 0x01);
                 self.key2 = (keys[0] & 0x02);
@@ -256,14 +265,14 @@
                 break;
 //                [[self delegate] TXPwrLevelUpdated:TXLevel];
             }
-            case ISSC_CHAR_RX_UUID://接收
+            case ISSC_CHAR_RX_UUID:
             {
                 unsigned char buf[4096] = {0};
                 [characteristic.value getBytes:buf length:[characteristic.value length]];
                 [self DisplayRece:buf length:[characteristic.value length]];
                 break;
             }
-            default://接收到数据
+            default://接收到数据 FF9E
             {
                 unsigned char buf[4096] = {0};
                 [characteristic.value getBytes:buf length:[characteristic.value length]];
@@ -272,7 +281,7 @@
             }
         }
     }else{
-        NSLog(@"updateValueForCharacteristic failed !");
+        NSLog(@"updateValueForCharacteristic failed !----%@",[error localizedDescription]);
     }
     
 }
@@ -280,13 +289,13 @@
 #pragma mark -7订阅后,每次当外设的特征值发生改变后,都会调用以下的方法
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateNotificationStateForCharacteristic:(nonnull CBCharacteristic *)characteristic error:(nullable NSError *)error
 {
+    NSLog(@"peripheral    didUpdateNotification   StateForCharacteristic:");
     if (error) {
         NSLog(@"Error state: %@",[error localizedDescription]);
         return;
     }
     if (characteristic.isNotifying) {
         NSLog(@"_peripheral readValueUpdateNotificationStateForCharacteristic");
-//        [_peripheral readValueForCharacteristic:characteristic];
         
     } else {
            NSLog(@"noting...//test writing data");
@@ -306,8 +315,7 @@
 #pragma mark - 开始测量等
 - (void)sendConnect:(UIButton *)btn
 {
-    //对连接的蓝牙设备进行写操作
-#pragma mark -8 向外设写入特征数据,比如温度改写  writeValue:forCharacteristic:type:/ CBPeripheral 类中
+#pragma mark -8 向外设写入特征数据  writeValue:forCharacteristic:type:/ CBPeripheral 类中
     //手机发[0xFD,0xFD,0xFA,0x05,年,月,日,小时,分,秒,0x0D, 0x0A]
     [self enableButtons:_peripheral];         // Enable button service (if found)
     [self enableTXPower:_peripheral];         // Enable TX power service (if found)
@@ -400,6 +408,8 @@
     }
     [SVProgressHUD showWithStatus:@"正在连接" ];
 #pragma mark -3连接发现的这个外设
+    /*连接成功过后,设置外设代理*/
+    [_peripheral setDelegate:self];
     /*发现这个设备过后开始连接,连接成功后回调[centralManager: didConnectPeripheral:]*/
     [self.manager connectPeripheral:_peripheral options:nil]; //连接的时候有时候会没有连接上或者时间有点久...
     //连接超时设置
@@ -411,7 +421,7 @@
         });
 }
 
-#pragma mark -发现设备
+#pragma mark -开始扫描设备
 - (void)foundDevice:(UIButton *)btn
 {
     [SVProgressHUD showWithStatus:@"正在扫描" ];
@@ -425,7 +435,7 @@
     });
 }
 
-#pragma mark ======
+#pragma mark
 -(UInt16) CBUUIDToInt:(CBUUID *) UUID {
     char b1[16];
     [UUID.data getBytes:b1 length:1];
@@ -503,13 +513,7 @@
     
 }
 
--(void) getAllCharacteristicsFromKeyfob:(CBPeripheral *)peripheral{
-    for (int i=0; i < peripheral.services.count; i++) {
-        CBService *service = [peripheral.services objectAtIndex:i];
-        NSLog(@"Fetching characteristics for service with UUID : %s\r",[self CBUUIDToString:service.UUID]);
-        [peripheral discoverCharacteristics:nil forService:service];
-    }
-}
+
 
 -(const char *) CBUUIDToString:(CBUUID *) UUID {
     return [[UUID.data description] cStringUsingEncoding:NSStringEncodingConversionAllowLossy];
