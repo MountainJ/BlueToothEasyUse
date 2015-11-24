@@ -13,6 +13,9 @@
 #import "BleDefines.h"
 #import "ResultsViewController.h"
 
+#import "MLTableAlert.h"//三方
+
+
 @interface RootViewController ()<CBCentralManagerDelegate,CBPeripheralDelegate>
 {
     CBPeripheral *_peripheral;
@@ -24,6 +27,16 @@
 @property(nonatomic,strong) CBCentralManager *manager;
 
 @property (nonatomic,strong) NSMutableArray *peripheralNames;
+//系统蓝牙连接及进度状态提醒
+@property (nonatomic,strong) UIView *indicatorView;
+@property (nonatomic,strong) UILabel *indicatorLabel;
+//设备
+@property (nonatomic,strong) NSMutableArray *devices;
+
+@property (nonatomic,strong) NSMutableDictionary *pdevicesObj;
+
+@property (strong, nonatomic) MLTableAlert *alert;
+
 
 @property (nonatomic)   float batteryLevel;
 @property (nonatomic)   BOOL key1;
@@ -38,6 +51,15 @@
 
 @implementation RootViewController
 
+
+- (NSMutableDictionary *)pdevicesObj
+{
+    if (!_pdevicesObj) {
+        _pdevicesObj = [NSMutableDictionary dictionary ];
+    }
+    return _pdevicesObj;
+}
+
 - (NSMutableArray *)peripheralNames
 {
     if (!_peripheralNames) {
@@ -46,9 +68,17 @@
     return _peripheralNames;
 }
 
+- (NSMutableArray *)devices
+{
+    if (!_devices) {
+        _devices = [NSMutableArray array];
+    }
+    return _devices;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-     self.view.backgroundColor  =[UIColor lightGrayColor];
+     self.view.backgroundColor  =[UIColor whiteColor];
     [self configUI];
     //创建CBCentralManager *manager ,设置代理,每次都检测蓝牙设备是否开启,如果关闭就会有系统提示开启.当Central Manager被初始化，我们要检查它的状态，以检查运行这个App的设备是不是支持BLE
     _manager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
@@ -57,23 +87,44 @@
 -(void)centralManagerDidUpdateState:(CBCentralManager *)central
 {
     switch (central.state) {
-        case CBCentralManagerStatePoweredOn:
-            NSLog(@"CBCentralManagerStatePoweredOn");
+        case CBCentralManagerStateResetting:
+        {
+            NSLog(@"CBCentralManagerStateResetting");
+            break;
+        }
+        case CBCentralManagerStateUnsupported:
+        {
+            NSLog(@"CBCentralManagerStateUnsupported");
+            break;
+        }
             
+        case CBCentralManagerStatePoweredOn:
+        {
+            [self indicatorView];
+            self.indicatorLabel.text = @"开始扫描设备";
+            self.indicatorLabel.textColor = [UIColor darkTextColor];
+            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(foundDevice:)];
+            [self.indicatorLabel addGestureRecognizer:tap];
             break;
+        }
         case CBCentralManagerStatePoweredOff:
-            NSLog(@"CBCentralManagerStatePoweredOff");
+        {
+            [self indicatorView];
+            self.indicatorLabel.textColor = [UIColor redColor];
+            self.indicatorLabel.text = @"蓝牙没有打开,请在设置中连接";
+        }
         default:
+        {
+            NSLog(@"CBCentralManagerStateUnknown");
             break;
+        }
     }
 }
-
-#pragma mark -2开始扫描
-
+/*
+ 第一个参数为空,即为返回所有的设备;第二个参数设置是否重名等
+ */
 -(void)scanClick
-{   /*
-     第一个参数为空,即为返回所有的设备;第二个参数设置是否重名等
-     */
+{
     [_manager scanForPeripheralsWithServices:nil options:@{CBCentralManagerScanOptionAllowDuplicatesKey : @YES }];
     
 }
@@ -90,17 +141,62 @@
 -(void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)RSSI
 {
     //RBP1508010664,MI,MiniBeacon_04819,Bluetooth BP,这是搜索到的4个蓝牙设备名称,根据实际情况更改
-    if ([peripheral.name isEqual:@"Bluetooth BP"]) {
-        //读取外设距离
-        [SVProgressHUD showSuccessWithStatus:[NSString stringWithFormat:@"找到设备:%@",peripheral.name]];
-        [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
-        _bDeviceLabel.text =[NSString stringWithFormat:@"设备:%@", peripheral.name];
-        _peripheral = peripheral;
-
-        /*停止扫描*/
-        [self.manager stopScan];
+    if (![self.peripheralNames containsObject:peripheral.name]&&peripheral.name) {
+        [self.peripheralNames addObject:peripheral.name];
+        CBPeripheral *peripherals = peripheral;
+        [self.devices addObject:peripherals];
     }
+
+//    if ([peripheral.name isEqual:@"Bluetooth BP"]) {
+//        //读取外设距离
+//        [SVProgressHUD showSuccessWithStatus:[NSString stringWithFormat:@"找到设备:%@",peripheral.name]];
+//        [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
+//        _bDeviceLabel.text =[NSString stringWithFormat:@"设备:%@", peripheral.name];
+//        _peripheral = peripheral;
+//        /*停止扫描*/
+//        [self.manager stopScan];
+//    }
 }
+
+- (void)showScanDeviceName:(NSMutableArray *)pDevices
+{
+    __weak typeof(self) weakSelf = self;
+
+    /*没有搜索到蓝牙设备,提示*/
+    if (!pDevices.count) {
+    _pressureLabel.text = @"没有搜索到设备,请打开设备电源进行连接!";
+        return;
+    }
+    //展示设备列表,并根据点击列表进行判断连接的设备;
+    self.alert = [MLTableAlert tableAlertWithTitle:@"设备" cancelButtonTitle:@"取消" numberOfRows:^NSInteger (NSInteger section)
+                  {
+                      return pDevices.count;
+                  }
+                                          andCells:^UITableViewCell* (MLTableAlert *anAlert, NSIndexPath *indexPath)
+                  {
+                      static NSString *CellIdentifier = @"CellIdentifier";
+                      UITableViewCell *cell = [anAlert.table dequeueReusableCellWithIdentifier:CellIdentifier];
+                      if (cell == nil)
+                          cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
+                      cell.textLabel.text = [NSString stringWithFormat:@"%@", pDevices[indexPath.row]];
+                      return cell;
+                  }];
+    
+    self.alert.height = 350;
+    [self.alert configureSelectionBlock:^(NSIndexPath *selectedIndex){
+       _peripheral = weakSelf.devices[selectedIndex.row];
+      [weakSelf connectDevice:nil];
+    } andCompletionBlock:^{
+        
+//        self.resultLabel.text = @"Cancel Button Pressed\nNo Cells Selected";
+    }];
+    
+    // show the alert
+    [self.alert show];
+    
+}
+
+
 #pragma mark -外设设置代理后更新外设距离
 -(void)peripheralDidUpdateRSSI:(CBPeripheral *)peripheral error:(NSError *)error
 {
@@ -123,8 +219,7 @@
     
     [_peripheral readRSSI];//peripheral:didReadRSSI:error
     //
-    [SVProgressHUD showWithStatus:@"更新数据..."];
-    [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
+  
     //
 #pragma mark -4发现外设提供了哪些服务,设置    [peripheral discoverServices:nil];传空代表查询全部服务,一般需要获取服务的UUID,参数( NSArray<CBUUID *> *)serviceUUIDs
 //    NSArray *cbUUIDS = [NSArray arrayWithObjects:[CBUUID UUIDWithString:@"FEE0"],[CBUUID UUIDWithString:@"FEE1"], nil];
@@ -140,10 +235,12 @@
 
 - (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
 {
-    NSLog(@"连接中突然断开了...");
-    //需要进行回连
-    [self.manager connectPeripheral:_peripheral options:nil];
+//    NSLog(@"连接中突然断开了...");
+//需要进行回连
+//    [self.manager connectPeripheral:_peripheral options:nil];
 }
+
+//
 
 #pragma mark -4发现查找设备的服务
 -(void) peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error{
@@ -151,6 +248,7 @@
         NSLog(@"已经找到服务%@",peripheral.services);
         /*
          */
+//        [SVProgressHUD dismiss];
         [SVProgressHUD showSuccessWithStatus:@"数据更新..."];
         [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
         //=================new================
@@ -176,6 +274,7 @@
         CBService *service = [peripheral.services objectAtIndex:i];
         [peripheral discoverCharacteristics:nil forService:service];
     }
+    
 }
 
 #pragma mark -5已经查找到了服务的特征
@@ -187,7 +286,6 @@
         {
             #pragma mark -6找到感兴趣的服务特征,读取特征的值  [peripheral readValueForCharacteristic:interestingCharacteristic];然后回调方法peripheral: didUpdateValueForCharacteristic: error:
             [_peripheral readValueForCharacteristic:characteristic];
-            
 //            if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:@"FF0F"]]) {
 //                NSLog(@"查找到制定的UUID后,读取值....");
 //                [_peripheral readValueForCharacteristic:characteristic];
@@ -211,6 +309,11 @@
 //获取外设发来的数据，不论是read和notify,获取数据都是从这个方法中读取。不是所有的特征值都可以被读,如果为不可读的数值,返回错误信息
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error
 {
+    
+    if (peripheral.state ==CBPeripheralStateDisconnecting) {
+        return;
+    }
+    
     NSLog(@"%@",characteristic);
     UInt16 characteristicUUID = [self CBUUIDToInt:characteristic.UUID];
      if (!error) {
@@ -395,6 +498,7 @@
 - (void)cancelConnectDevice:(UIButton *)btn
 {
     [self.manager cancelPeripheralConnection:_peripheral];
+    
     [SVProgressHUD showErrorWithStatus:@"断开连接..."];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
     _bDeviceLabel.text = [NSString stringWithFormat:@"设备%@已经断开",_peripheral.name];
@@ -413,12 +517,12 @@
     /*发现这个设备过后开始连接,连接成功后回调[centralManager: didConnectPeripheral:]*/
     [self.manager connectPeripheral:_peripheral options:nil]; //连接的时候有时候会没有连接上或者时间有点久...
     //连接超时设置
-        double delayInSeconds = 30.0;
-        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
-        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
-            [SVProgressHUD dismiss];
-            [self.manager cancelPeripheralConnection:_peripheral];
-        });
+//        double delayInSeconds = 10.0;
+//        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+//        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+//            [SVProgressHUD dismiss];
+//            [self.manager cancelPeripheralConnection:_peripheral];
+//        });
 }
 
 #pragma mark -开始扫描设备
@@ -427,12 +531,15 @@
     [SVProgressHUD showWithStatus:@"正在扫描" ];
     [self scanClick];
     //连接超时设置
-    double delayInSeconds = 10.0;
+    __weak typeof(self) weakSelf = self;
+    double delayInSeconds = 3.0;
     dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
     dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
         [SVProgressHUD dismiss];
-        [self.manager stopScan];
+        [weakSelf.manager stopScan];
+        [weakSelf showScanDeviceName:weakSelf.peripheralNames];
     });
+
 }
 
 #pragma mark
@@ -558,7 +665,7 @@
 {
     //测量过程压力值
     top = pressureH*256 + pressureL;
-    _pressureLabel.text = [NSString stringWithFormat:@"压力的值为%d",top];
+//    _pressureLabel.text = [NSString stringWithFormat:@"压力的值为%d",top];
 
 }
 #pragma mark - 处理接收到的结果数据
@@ -568,10 +675,26 @@
 }
 
 #pragma mark - 界面配置...
+
+- (UIView *)indicatorView
+{
+    if (!_indicatorView) {
+        _indicatorView = [[UIView alloc] initWithFrame:CGRectMake(0, 64, [UIScreen mainScreen].bounds.size.width, 40)];
+        _indicatorView.backgroundColor = [UIColor lightGrayColor];
+        [self.view addSubview:_indicatorView];
+         self.indicatorLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, _indicatorView.frame.size.width, _indicatorView.frame.size.height)];
+        self.indicatorLabel.textAlignment = NSTextAlignmentCenter;
+        self.indicatorLabel.font = [UIFont systemFontOfSize:11.0f];
+        self.indicatorLabel.userInteractionEnabled = YES;
+        [_indicatorView addSubview:self.indicatorLabel];
+    }
+    return _indicatorView;
+}
+
 -(void)configUI
 {
     self.title = @"BlueToothUse";
-    UILabel *deviceLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.frame.size.width/2-140, 64+20, 280, 30)];
+    UILabel *deviceLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.frame.size.width/2-140, 64+80, 280, 30)];
     deviceLabel.backgroundColor = [UIColor yellowColor];
     deviceLabel.textColor = [UIColor redColor];
     deviceLabel.text = @"设备....";
@@ -618,5 +741,7 @@
     [self.view addSubview:btn];
     return btn;
 }
+
+
 
 @end
