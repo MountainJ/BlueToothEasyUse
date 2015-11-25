@@ -15,6 +15,8 @@
 
 #import "MLTableAlert.h"
 
+#import "BlueToothConnecter/"
+
 
 @interface RootViewController ()<CBCentralManagerDelegate,CBPeripheralDelegate>
 {
@@ -81,7 +83,7 @@
      self.view.backgroundColor  =[UIColor whiteColor];
     [self configUI];
     //创建CBCentralManager *manager ,设置代理,每次都检测蓝牙设备是否开启,如果关闭就会有系统提示开启.当Central Manager被初始化，我们要检查它的状态，以检查运行这个App的设备是不是支持BLE
-    _manager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
+//    _manager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
 }
 
 #pragma mark -1蓝牙开启或者关闭状态实时监测.该方法会根据设备蓝牙的状态多次调用...
@@ -192,7 +194,6 @@
 //        self.resultLabel.text = @"Cancel Button Pressed\nNo Cells Selected";
     }];
     [self.alert show];
-    
 }
 
 #pragma mark -外设设置代理后更新外设距离
@@ -441,7 +442,7 @@
     if (error) {
         NSLog(@"Error writing characteristic value: %@",[error localizedDescription]);
     }else{
-        NSLog(@"%s",__func__);
+        NSLog(@"peripheral  didWriteValueForCharacteristic");
     }
 }
 
