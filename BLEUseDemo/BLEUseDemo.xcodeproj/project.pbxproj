@@ -30,6 +30,7 @@
 		7BC68CD51BE8530B002F6618 /* BLEUseDemoTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BC68CD41BE8530B002F6618 /* BLEUseDemoTests.m */; };
 		7BC68CE01BE8530B002F6618 /* BLEUseDemoUITests.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BC68CDF1BE8530B002F6618 /* BLEUseDemoUITests.m */; };
 		7BC68CEF1BE85383002F6618 /* RootViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BC68CEE1BE85383002F6618 /* RootViewController.m */; settings = {ASSET_TAGS = (); }; };
+		7BD6A70A1C0697C0004C01DC /* BlueToothDataTransformTool.m in Sources */ = {isa = PBXBuildFile; fileRef = 7BD6A7091C0697C0004C01DC /* BlueToothDataTransformTool.m */; settings = {ASSET_TAGS = (); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +90,8 @@
 		7BC68CE11BE8530B002F6618 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7BC68CED1BE85383002F6618 /* RootViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RootViewController.h; sourceTree = "<group>"; };
 		7BC68CEE1BE85383002F6618 /* RootViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RootViewController.m; sourceTree = "<group>"; };
+		7BD6A7081C0697C0004C01DC /* BlueToothDataTransformTool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BlueToothDataTransformTool.h; sourceTree = "<group>"; };
+		7BD6A7091C0697C0004C01DC /* BlueToothDataTransformTool.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BlueToothDataTransformTool.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -146,6 +149,8 @@
 			children = (
 				7B8A01A11C0594A300EBCB11 /* BlueToothConnecter.h */,
 				7B8A01A21C0594A300EBCB11 /* BlueToothConnecter.m */,
+				7BD6A7081C0697C0004C01DC /* BlueToothDataTransformTool.h */,
+				7BD6A7091C0697C0004C01DC /* BlueToothDataTransformTool.m */,
 			);
 			path = BlueToothConnecter;
 			sourceTree = "<group>";
@@ -381,6 +386,7 @@
 				7BB508661BEC757F00915DF2 /* SVProgressHUD.m in Sources */,
 				7BC68CBC1BE8530B002F6618 /* main.m in Sources */,
 				7BB508641BEC757F00915DF2 /* SVIndefiniteAnimatedView.m in Sources */,
+				7BD6A70A1C0697C0004C01DC /* BlueToothDataTransformTool.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

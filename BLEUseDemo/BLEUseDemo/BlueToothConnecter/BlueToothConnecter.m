@@ -11,6 +11,9 @@
 #import "MLTableAlert.h"
 #import "BleDefines.h"
 #import "SVProgressHUD.h"
+#import "BlueToothDataTransformTool.h"
+
+
 
 @interface BlueToothConnecter ()<CBCentralManagerDelegate,CBPeripheralDelegate>
 
@@ -27,10 +30,12 @@
 @property (nonatomic)   char z;
 @property (nonatomic)   char TXPwrLevel;
 
-@property (nonatomic, copy) makeToast toastBlock;
-@property (nonatomic, copy) startConnect startBlock;
-@property (nonatomic, copy) scanNoBlueTeeth noDeviceBlock;
-@property (nonatomic, copy) connectSuccess successBlock;
+@property (nonatomic, copy) measureSuccess successMeasure;
+@property (nonatomic, copy) measureFailure failureMeasure;
+
+@property (nonatomic, copy) blueToothPowerOn blueToothPowerOn;
+@property (nonatomic, copy) blueToothPowerOff blueToothPowerOff;
+
 
 @end
 
@@ -39,7 +44,12 @@
     CBPeripheral *_peripheral;
 }
 
-+ (instancetype )shareBlueToothManager
+-(void)registerBlueToothManager
+{
+    _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
+}
+
++ (instancetype )shareBlueToothConnecter
 {
     static BlueToothConnecter * connectManager;
     static dispatch_once_t onceToken;
@@ -47,15 +57,6 @@
         connectManager = [[BlueToothConnecter alloc] init];
     });
     return connectManager;
-}
-
-- (instancetype)init
-{
-    self = [super init];
-    if (self) {
-        _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
-    }
-    return self;
 }
 
 - (NSMutableArray *)peripheralNames
@@ -74,30 +75,28 @@
     return _devices;
 }
 
-- (BOOL)judgeBlueTeethOpenOrClose:(makeToast)block
+- (void)scanPeripheralsCompletion:(void (^)(NSArray *))scanPepipheralArray
 {
-    _toastBlock = block;
-    if (_centralManager.state ==CBCentralManagerStatePoweredOff) {
-        _toastBlock(@"蓝牙未连接");
-        return NO;
-    }
-    [self foundDevice];
-    return YES;
+    [SVProgressHUD showWithStatus:@"正在扫描" ];
+    [self scanClick];
+     WS(weakSelf);
+    //扫描超时设置
+    double delayInSeconds = 2.0;
+    dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+    dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+        [SVProgressHUD dismiss];
+        [weakSelf.centralManager stopScan];
+        [weakSelf showScanDeviceName:weakSelf.peripheralNames];
+        scanPepipheralArray(weakSelf.devices);
+    });
 }
 
-- (void)startConnect:(startConnect)startConnect ScanNoDevice:(scanNoBlueTeeth)noBlueTeeth Toast:(makeToast)toastBlock Success:(connectSuccess)success
+-(void)startHandleMeasureSuccess:(measureSuccess)success failure:(measureFailure)failure
 {
-    _startBlock = startConnect;
-    _noDeviceBlock = noBlueTeeth;
-    _successBlock = success;
-    _toastBlock = toastBlock;
-    if (_peripheral.state ==CBPeripheralStateConnected) {
-        [self sendConnect];
-    }else{
-        _toastBlock(@"设备未连接");
-    }
+    [self startMeasure];
+    _successMeasure = success;
+    _failureMeasure = failure;
 }
-
 
 #pragma mark -中央设备蓝牙状态监测
 -(void)centralManagerDidUpdateState:(CBCentralManager *)central
@@ -116,10 +115,13 @@
         case CBCentralManagerStatePoweredOn:
         {
             NSLog(@"CBCentralManagerStatePoweredOn");
+            _blueToothPowerOn();
             break;
         }
         case CBCentralManagerStatePoweredOff:
         {
+            _blueToothPowerOff();
+            [self.devices removeAllObjects];
             NSLog(@"CBCentralManagerStatePoweredOff");
         }
             break;
@@ -131,19 +133,35 @@
     }
 }
 
+-(void)checkBlueToothPowerOn:(blueToothPowerOn)blueToothPowerOn powerOff:(blueToothPowerOff)blueToothPowerOff
+{
+    _blueToothPowerOn = blueToothPowerOn;
+    _blueToothPowerOff = blueToothPowerOff;
+}
+
+#pragma mark -写数据, 关闭设备
+-(void)shutDownDevice
+{
+    //发送关闭信号
+    uint8_t b[] = {0xFD,0xFD,0xFE,0x06,0X0D, 0x0A};
+    NSMutableData *data = [[NSMutableData alloc] initWithBytes:b length:6];
+    [BlueToothDataTransformTool writeValue:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_TX_UUID p:_peripheral data:data];
+}
+
 #pragma mark -开始扫描设备
 - (void)foundDevice
 {
     [SVProgressHUD showWithStatus:@"正在扫描" ];
     [self scanClick];
     __weak typeof(self) weakSelf = self;
-    //扫描超时设置
-    double delayInSeconds = 2.0;
+    //扫描限时时设置
+    double delayInSeconds = 1.5;
     dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
     dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
         [SVProgressHUD dismiss];
         [weakSelf.centralManager stopScan];
         [weakSelf showScanDeviceName:weakSelf.peripheralNames];
+        
     });
 }
 
@@ -162,7 +180,7 @@
  */
 -(void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)RSSI
 {
-     NSLog(@"advertisementData:%@ \n %@",advertisementData,peripheral.name);
+//     NSLog(@"advertisementData:%@ \n %@",advertisementData,peripheral.name);
     if (![self.peripheralNames containsObject:peripheral.name]&&peripheral.name) {
         [self.peripheralNames addObject:peripheral.name];
         CBPeripheral *peripherals = peripheral;
@@ -181,7 +199,7 @@
     __weak typeof(self) weakSelf = self;
     /*没有搜索到蓝牙设备,提示*/
     if (!pDevices.count) {
-        _toastBlock(@"没有搜索到设备,请打开设备电源进行连接!");
+        NSLog(@"没有搜索到设备,请打开设备电源进行连接!");
         return;
     }
     //展示设备列表,并根据点击列表进行判断连接的设备;
@@ -219,13 +237,13 @@
     /*连接成功过后,设置外设代理*/
     [_peripheral setDelegate:self];
     /*发现这个设备过后开始连接,连接成功后回调[centralManager: didConnectPeripheral:]*/
-    [self.centralManager connectPeripheral:_peripheral options:nil]; //连接的时候有时候会没有连接上或者时间有点久...
+    [self.centralManager connectPeripheral:_peripheral options:nil];
     //连接超时设置
-            double delayInSeconds = 10.0;
-            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
-            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
-                [SVProgressHUD dismiss];
-            });
+//            double delayInSeconds = 10.0;
+//            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+//            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+//                [SVProgressHUD dismiss];
+//            });
 }
 
 /**
@@ -251,7 +269,7 @@
 - (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
 {
     //需要进行回连
-    //    [self.manager connectPeripheral:_peripheral options:nil];
+        [self.centralManager connectPeripheral:_peripheral options:nil];
 }
 
 #pragma mark -查找已经连接设备提供的服务
@@ -387,8 +405,7 @@
         NSLog(@"updateValueForCharacteristic failed !----%@",[error localizedDescription]);
     }
 }
-//UUID处理部分
-#pragma mark-
+
 -(UInt16) CBUUIDToInt:(CBUUID *) UUID {
     char b1[16];
     [UUID.data getBytes:b1 length:1];
@@ -396,18 +413,15 @@
 }
 
 #pragma mark - 写数据,开始测量
-- (void)sendConnect
+- (void)startMeasure
 {
     [SVProgressHUD showWithStatus:@"正在测量" ];
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeNone];
-    //手机发[0xFD,0xFD,0xFA,0x05,年,月,日,小时,分,秒,0x0D, 0x0A]
-    [self enableButtons:_peripheral];
-    [self enableTXPower:_peripheral];
-    [self enableRead:_peripheral];
     //发送数据告之血压计,连接成功,并可以进行量测.
     uint8_t b[] = {0xFD,0xFD,0xFA,0x05,0X0D, 0x0A};
     NSMutableData *data = [[NSMutableData alloc] initWithBytes:b length:6];
-    [self writeValue:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_TX_UUID p:_peripheral data:data];
+    [BlueToothDataTransformTool enableNotifyCBPeripheral:_peripheral];
+    [BlueToothDataTransformTool writeValue:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_TX_UUID p:_peripheral data:data];
 }
 
 #pragma mark -断开连接
@@ -418,79 +432,7 @@
     [SVProgressHUD setDefaultMaskType:SVProgressHUDMaskTypeBlack];
 }
 
-#pragma mark -写数据, 关闭设备
-- (void)cloceDevice:(UIButton *)btn
-{
-    //发送关闭信号
-    uint8_t b[] = {0xFD,0xFD,0xFE,0x06,0X0D, 0x0A};
-    NSMutableData *data = [[NSMutableData alloc] initWithBytes:b length:6];
-    [self writeValue:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_TX_UUID p:_peripheral data:data];
-}
 
-/**
- *  写入数据指令
- *
- *  @param serviceUUID
- *  @param characteristicUUID
- *  @param p
- *  @param data
- */
--(void)writeValue:(int)serviceUUID characteristicUUID:(int)characteristicUUID p:(CBPeripheral *)p data:(NSData *)data
-{
-    UInt16 s = [self swap:serviceUUID];
-    UInt16 c = [self swap:characteristicUUID];
-    NSData *sd = [[NSData alloc] initWithBytes:(char *)&s length:2];
-    NSData *cd = [[NSData alloc] initWithBytes:(char *)&c length:2];
-    CBUUID *su = [CBUUID UUIDWithData:sd];
-    CBUUID *cu = [CBUUID UUIDWithData:cd];
-    CBService *service = [self findServiceFromUUID:su p:p];
-    if (!service) {
-        return;
-    }
-    CBCharacteristic *characteristic = [self findCharacteristicFromUUID:cu service:service];
-    if (!characteristic) {
-        return;
-    }
-    [p writeValue:data forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];  //ISSC
-}
-
--(const char *) CBUUIDToString:(CBUUID *) UUID {
-    return [[UUID.data description] cStringUsingEncoding:NSStringEncodingConversionAllowLossy];
-}
-
--(UInt16) swap:(UInt16)s {
-    UInt16 temp = s << 8;
-    temp |= (s >> 8);
-    return temp;
-}
-
--(CBService *) findServiceFromUUID:(CBUUID *)UUID p:(CBPeripheral *)p
-{
-    for(int i = 0; i < p.services.count; i++) {
-        CBService *s = [p.services objectAtIndex:i];
-        if ([self compareCBUUID:s.UUID UUID2:UUID])
-            return s;
-    }
-    return nil; //Service not found on this peripheral
-}
-
--(CBCharacteristic *) findCharacteristicFromUUID:(CBUUID *)UUID service:(CBService*)service {
-    for(int i=0; i < service.characteristics.count; i++) {
-        CBCharacteristic *c = [service.characteristics objectAtIndex:i];
-        if ([self compareCBUUID:c.UUID UUID2:UUID])
-            return c;
-    }
-    return nil; //Characteristic not found on this service
-}
-
--(int) compareCBUUID:(CBUUID *) UUID1 UUID2:(CBUUID *)UUID2 {
-    char b1[16];
-    char b2[16];
-    [UUID1.data getBytes:b1 length:4];
-    [UUID2.data getBytes:b2 length:4];
-    if (memcmp(b1, b2, UUID1.data.length) == 0)return 1;
-    else return 0;
-}
 
 #pragma mark - 写入数据过后回调
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(nonnull CBCharacteristic *)characteristic error:(nullable NSError *)error
@@ -500,39 +442,6 @@
     }else{
         NSLog(@"peripheral  didWriteValueForCharacteristic");
     }
-}
-
-#pragma mark -注册指定特征值监听,方便值改变时获取最新数据
--(void) enableButtons:(CBPeripheral *)p {
-    [self notification:_KEYS_SERVICE_UUID characteristicUUID:_KEYS_NOTIFICATION_UUID p:p on:YES];
-}
-
--(void) enableTXPower:(CBPeripheral *)p {
-    [self notification:_PROXIMITY_TX_PWR_SERVICE_UUID characteristicUUID:_PROXIMITY_TX_PWR_NOTIFICATION_UUID p:p on:YES];
-}
-
--(void)enableRead:(CBPeripheral*)p
-{
-    [self notification:ISSC_SERVICE_UUID characteristicUUID:ISSC_CHAR_RX_UUID p:p on:YES];
-}
-
--(void)notification:(int)serviceUUID characteristicUUID:(int)characteristicUUID p:(CBPeripheral *)p on:(BOOL)on
-{
-    UInt16 s = [self swap:serviceUUID];
-    UInt16 c = [self swap:characteristicUUID];
-    NSData *sd = [[NSData alloc] initWithBytes:(char *)&s length:2];
-    NSData *cd = [[NSData alloc] initWithBytes:(char *)&c length:2];
-    CBUUID *su = [CBUUID UUIDWithData:sd];
-    CBUUID *cu = [CBUUID UUIDWithData:cd];
-    CBService *service = [self findServiceFromUUID:su p:p];
-    if (!service) {
-        return;
-    }
-    CBCharacteristic *characteristic = [self findCharacteristicFromUUID:cu service:service];
-    if (!characteristic) {
-        return;
-    }
-    [p setNotifyValue:on forCharacteristic:characteristic];
 }
 
 #pragma mark ----数据结果展示----
@@ -597,7 +506,9 @@
     }
     //显示错误信息
     if (err ) {
-        NSLog(@"%@",[err localizedCapitalizedString]);
+         NSLog(@"%@",[err localizedCapitalizedString]);
+         NSError *error = [NSError errorWithDomain:err code:555 userInfo:nil];
+         _failureMeasure(error);
     }
 }
 
@@ -612,11 +523,10 @@
 -(void)TestShowGetData:(uint8_t)sys DIA:(uint8_t)dia PUL:(uint8_t)pul
 {
     [SVProgressHUD dismiss];
-
     NSDictionary * senderDict = [NSDictionary dictionaryWithObjectsAndKeys:[NSString stringWithFormat:@"%d",sys],@"sys",
                                                                            [NSString stringWithFormat:@"%d",dia],@"dia",
                                                                            [NSString stringWithFormat:@"%d",pul],@"pul",nil];
-    _successBlock(senderDict);
+    _successMeasure(senderDict);
 }
 
 @end

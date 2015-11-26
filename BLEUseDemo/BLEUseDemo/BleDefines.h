@@ -46,6 +46,6 @@
 //发送
 #define ISSC_CHAR_TX_UUID                          0xFFF2
 
-
+#define WS(weakSelf) __weak typeof(self)weakSelf = self
 
 #endif /* BleDefines_h */
